@@ -33,6 +33,10 @@ namespace AsmResolver.PE.Win32Resources
             else
                 Id = entry.IdOrNameOffset;
 
+            // Note: An invalid data entry offset is already reported by the parent directory.
+            if (!entryReader.IsValid)
+                return;
+
             _contentsRva = entryReader.ReadUInt32();
             _contentsSize = entryReader.ReadUInt32();
             CodePage = entryReader.ReadUInt32();

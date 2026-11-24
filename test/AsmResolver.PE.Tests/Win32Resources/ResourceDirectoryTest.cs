@@ -1,7 +1,10 @@
+using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AsmResolver.PE.Builder;
+using AsmResolver.PE.File;
 using AsmResolver.PE.Win32Resources;
 using Xunit;
 
@@ -179,6 +182,36 @@ namespace AsmResolver.PE.Tests.Win32Resources
             var directory = Assert.IsAssignableFrom<ResourceDirectory>(Assert.Single(newImage.Resources!.Entries));
             Assert.Equal((uint) ResourceType.String, directory.Id);
             Assert.Empty(directory.Entries);
+        }
+
+        [Fact]
+        public void MaliciousDataEntryOffset()
+        {
+            var image = PEImage.FromBytes(Properties.Resources.HelloWorld, TestReaderParameters);
+            image.Resources = new ResourceDirectory(0u)
+            {
+                Entries = { new ResourceData(1u, new DataSegment([1, 2, 3, 4])) }
+            };
+
+            using var stream = new MemoryStream();
+            new ManagedPEFileBuilder().CreateFile(image).Write(stream);
+            byte[] data = stream.ToArray();
+
+            var file = PEFile.FromBytes(data);
+            uint resourcesRva = file.OptionalHeader
+                .GetDataDirectory(DataDirectoryIndex.ResourceDirectory)
+                .VirtualAddress;
+
+            // Point the data entry of the first directory entry outside of the file.
+            ulong rootOffset = file.RvaToFileOffset(resourcesRva);
+            int entryOffset = (int) (rootOffset + SerializedResourceDirectory.ResourceDirectorySize);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(entryOffset + sizeof(uint)), 0x7FFFFFF0);
+
+            var newImage = PEImage.FromBytes(data, new PEReaderParameters(EmptyErrorListener.Instance));
+
+            var entry = Assert.IsAssignableFrom<ResourceData>(Assert.Single(newImage.Resources!.Entries));
+            Assert.Equal(1u, entry.Id);
+            Assert.Null(entry.Contents);
         }
 
         [Fact]
