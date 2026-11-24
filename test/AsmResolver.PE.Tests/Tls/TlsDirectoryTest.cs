@@ -150,5 +150,53 @@ namespace AsmResolver.PE.Tests.Tls
             Assert.Equal(buffer.Length, newDirectory.CallbackFunctions[1].CreateReader().ReadBytes(buffer, 0, buffer.Length));
             Assert.Equal(callbackFunction2.Data, buffer);
         }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void PersistentEmptyDirectory(bool is32Bit)
+        {
+            // TLS directories do not need to define template data, an index or callback functions.
+            var directory = new TlsDirectory
+            {
+                SizeOfZeroFill = 0x10
+            };
+
+            var file = new PEFile
+            {
+                FileHeader =
+                {
+                    Machine = is32Bit ? MachineType.I386 : MachineType.Amd64,
+                },
+                OptionalHeader =
+                {
+                    Magic = is32Bit ? OptionalHeaderMagic.PE32 : OptionalHeaderMagic.PE32Plus
+                },
+                Sections =
+                {
+                    new PESection(".rdata", SectionFlags.ContentInitializedData | SectionFlags.MemoryRead, directory)
+                },
+            };
+
+            // Update TLS directory.
+            file.UpdateHeaders();
+            file.OptionalHeader.DataDirectories[(int) DataDirectoryIndex.TlsDirectory] =
+                new DataDirectory(directory.Rva, directory.GetPhysicalSize());
+
+            // Write.
+            using var s = new MemoryStream();
+            file.Write(s);
+
+            // Read.
+            var image = PEImage.FromStream(s, TestReaderParameters);
+            var newDirectory = image.TlsDirectory!;
+            Assert.NotNull(newDirectory);
+
+            // Verify.
+            Assert.Null(newDirectory.TemplateData);
+            Assert.Same(SegmentReference.Null, newDirectory.Index);
+            Assert.Empty(newDirectory.CallbackFunctions);
+            Assert.Equal(0x10u, newDirectory.SizeOfZeroFill);
+        }
     }
 }

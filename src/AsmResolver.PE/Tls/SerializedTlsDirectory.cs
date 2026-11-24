@@ -26,7 +26,12 @@ namespace AsmResolver.PE.Tls
 
             _templateStart = reader.ReadNativeInt(relocation.Is32Bit);
             _templateEnd = reader.ReadNativeInt(relocation.Is32Bit);
-            Index = context.File.GetReferenceToRva((uint)(reader.ReadNativeInt(relocation.Is32Bit) - relocation.ImageBase));
+
+            ulong indexAddress = reader.ReadNativeInt(relocation.Is32Bit);
+            Index = indexAddress != 0
+                ? context.File.GetReferenceToRva((uint) (indexAddress - relocation.ImageBase))
+                : SegmentReference.Null;
+
             _addressOfCallbacks = reader.ReadNativeInt(relocation.Is32Bit);
             SizeOfZeroFill = reader.ReadUInt32();
             Characteristics = (TlsCharacteristics) reader.ReadUInt32();
@@ -37,6 +42,9 @@ namespace AsmResolver.PE.Tls
         /// <inheritdoc />
         protected override IReadableSegment? GetTemplateData()
         {
+            if (_templateStart == 0 && _templateEnd == 0)
+                return null;
+
             if (_templateEnd < _templateStart)
             {
                 return _context.BadImageAndReturn<IReadableSegment>(
@@ -67,6 +75,9 @@ namespace AsmResolver.PE.Tls
                 | ReferenceTableAttributes.Adaptive
                 | ReferenceTableAttributes.ZeroTerminated
             );
+
+            if (_addressOfCallbacks == 0)
+                return result;
 
             var file = _context.File;
             ulong imageBase = file.OptionalHeader.ImageBase;
