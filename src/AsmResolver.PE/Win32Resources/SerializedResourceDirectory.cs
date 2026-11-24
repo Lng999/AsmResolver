@@ -74,8 +74,12 @@ namespace AsmResolver.PE.Win32Resources
         {
             var result = new OwnedCollection<ResourceDirectory, IResourceEntry>(this);
 
-            // Optimisation, check for invalid resource directory offset, and prevention of self loop:
-            if (_namedEntries + _idEntries == 0 || _depth >= MaxDepth)
+            // Optimisation, check for empty or invalid resource directory offset.
+            if (_namedEntries + _idEntries == 0)
+                return result;
+
+            // Prevention of self loop:
+            if (_depth >= MaxDepth)
             {
                 _context.BadImage($"Reached maximum recursion depth of {_depth} sub resource directories.");
                 return result;

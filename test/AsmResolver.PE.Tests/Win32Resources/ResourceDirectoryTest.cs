@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using AsmResolver.PE.Builder;
 using AsmResolver.PE.Win32Resources;
 using Xunit;
 
@@ -159,6 +161,24 @@ namespace AsmResolver.PE.Tests.Win32Resources
             var data = (ResourceData) directory.Entries[0];
 
             Assert.Null(data.Contents);
+        }
+
+        [Fact]
+        public void ReadEmptyDirectoryShouldNotReportError()
+        {
+            var image = PEImage.FromBytes(Properties.Resources.HelloWorld, TestReaderParameters);
+            image.Resources = new ResourceDirectory(0u)
+            {
+                Entries = { new ResourceDirectory(ResourceType.String) }
+            };
+
+            using var stream = new MemoryStream();
+            new ManagedPEFileBuilder().CreateFile(image).Write(stream);
+            var newImage = PEImage.FromBytes(stream.ToArray(), TestReaderParameters);
+
+            var directory = Assert.IsAssignableFrom<ResourceDirectory>(Assert.Single(newImage.Resources!.Entries));
+            Assert.Equal((uint) ResourceType.String, directory.Id);
+            Assert.Empty(directory.Entries);
         }
 
         [Fact]
